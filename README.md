@@ -16,3 +16,7 @@ some point it would be nice to remove this dependency) and all mighty vulkan API
 - The actual library
 - CSS engine
 - XML support
+
+Because this library is free to use and has a very permissive licence, 
+I would really appreciate (but its not mandatory) if you could link this reposotory in projects 
+where you use it.
