@@ -14,3 +14,5 @@ some point it would be nice to remove this dependency) and all mighty vulkan API
 
 - Portability across operating systems and architectures (android, ios, wasm)
 - The actual library
+- CSS engine
+- XML support

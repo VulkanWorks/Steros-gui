@@ -8,6 +8,7 @@
 
 typedef struct {
     GLFWwindow* window;
+
     VkInstance instance;
     VkSurfaceKHR surface;
     VkPhysicalDevice physicalDevice;
@@ -28,10 +29,15 @@ typedef struct {
     VkFramebuffer *swapChainFrameBuffers;
     VkCommandPool commandPool;
     VkCommandBuffer *commandBuffers;
+
     VkSemaphore* imageAvailableSemaphores;
     VkSemaphore* renderFinishedSemaphores;
     VkFence* inFlightFences;
     VkFence* imagesInFlight;
+
+    VkBuffer vertexBuffer;
+    VkDeviceMemory vertexBufferMemory;
+
     size_t currentFrame;
     bool frameBufferResized;
 } StrApp;

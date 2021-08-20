@@ -5,12 +5,24 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <cglm/vec2.h>
+#include <cglm/vec3.h>
 
 #ifndef NDEBUG
 #define dbg_assert(x) assert(x)
 #else
-#define dbg_assert(x) x
+#define dbg_assert
 #endif
+
+typedef struct {
+  VkVertexInputAttributeDescription array[2];
+  uint32_t size;
+} VkVertexInputAttributeDescriptionArray;
+
+typedef struct {
+  vec2 pos;
+  vec3 color;
+} Vertex;
 
 typedef struct {
   VkSurfaceCapabilitiesKHR capabilities;
@@ -34,7 +46,57 @@ static bool init = false;
 static bool enableValidationLayers = true;
 static const char *validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 static const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+const Vertex vertices[] = {
+  {{0.0f,  -0.5f}, {1.0f, 1.0f, 1.0f}},
+  {{0.5f,  0.5f},  {0.0f, 1.0f, 0.0f}},
+  {{-0.5f, 0.5f},  {0.0f, 0.0f, 1.0f}}
+};
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
+static VkVertexInputAttributeDescriptionArray getAttributeDescriptions() {
+  VkVertexInputAttributeDescriptionArray attributeDescriptions = {
+    .array = {
+      {
+        .binding = 0,
+        .location = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = offsetof(Vertex, pos)
+      },
+      {
+        .binding = 0,
+        .location = 1,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = offsetof(Vertex, color)
+      }
+    },
+    .size = 2
+  };
+
+  return attributeDescriptions;
+}
+
+static VkVertexInputBindingDescription getBindingDescription() {
+  VkVertexInputBindingDescription bindingDescription = {
+    .binding = 0,
+    .stride = sizeof(Vertex),
+    .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+  };
+
+  return bindingDescription;
+}
+
+uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+  VkPhysicalDeviceMemoryProperties memProperties;
+  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+  for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+    if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+      return i;
+    }
+  }
+
+  exit(-1);
+}
 
 uint32_t clamp(uint32_t d, uint32_t min, uint32_t max) {
   const uint32_t t = d < min ? min : d;
@@ -51,12 +113,12 @@ char *readShader(const char *filename, long *size) {
   }
 
   struct stat sb;
-  if(stat(filename, &sb) == -1) {
+  if (stat(filename, &sb) == -1) {
     perror("error");
     exit(-1);
   }
 
-  char* fileContents = malloc(sb.st_size);
+  char *fileContents = malloc(sb.st_size);
   fread(fileContents, sb.st_size, 1, fp);
 
   fclose(fp);
@@ -283,6 +345,10 @@ void createCommandBuffers(StrApp *app) {
 
     vkCmdBindPipeline(app->commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, app->pipeline);
 
+    VkBuffer vertexBuffers[] = {app->vertexBuffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(app->commandBuffers[i], 0, 1, vertexBuffers, offsets);
+
     vkCmdDraw(app->commandBuffers[i], 3, 1, 0, 0);
 
     vkCmdEndRenderPass(app->commandBuffers[i]);
@@ -290,6 +356,39 @@ void createCommandBuffers(StrApp *app) {
     result = vkEndCommandBuffer(app->commandBuffers[i]);
     dbg_assert(result == VK_SUCCESS);
   }
+}
+
+void createVertexBuffer(StrApp *app) {
+  VkBufferCreateInfo bufferInfo = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .size = sizeof(vertices),
+    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+  };
+
+  VkResult result = vkCreateBuffer(app->logicalDevice, &bufferInfo, NULL, &app->vertexBuffer);
+  dbg_assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements memRequirements;
+  vkGetBufferMemoryRequirements(app->logicalDevice, app->vertexBuffer, &memRequirements);
+
+  VkMemoryAllocateInfo allocInfo = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = memRequirements.size,
+    .memoryTypeIndex = findMemoryType(app->physicalDevice,
+                                      memRequirements.memoryTypeBits,
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  };
+
+  result = vkAllocateMemory(app->logicalDevice, &allocInfo, NULL, &app->vertexBufferMemory);
+  dbg_assert(result == VK_SUCCESS);
+
+  vkBindBufferMemory(app->logicalDevice, app->vertexBuffer, app->vertexBufferMemory, 0);
+
+  void *data;
+  vkMapMemory(app->logicalDevice, app->vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+  memcpy(data, vertices, (size_t) bufferInfo.size);
+  vkUnmapMemory(app->logicalDevice, app->vertexBufferMemory);
 }
 
 void createCommandPool(StrApp *app) {
@@ -345,10 +444,15 @@ void createGraphicsPipeline(StrApp *app) {
 
   VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
+  VkVertexInputBindingDescription bindingDescription = getBindingDescription();
+  VkVertexInputAttributeDescriptionArray attributeDescriptions = getAttributeDescriptions();
+
   VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-    .vertexBindingDescriptionCount = 0,
-    .vertexAttributeDescriptionCount = 0
+    .vertexBindingDescriptionCount = 1,
+    .pVertexBindingDescriptions = &bindingDescription,
+    .vertexAttributeDescriptionCount = attributeDescriptions.size,
+    .pVertexAttributeDescriptions = attributeDescriptions.array
   };
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
@@ -835,7 +939,7 @@ void drawFrame(StrApp *app) {
   app->currentFrame = (app->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-static void frameBufferResizeCallback(GLFWwindow* window, int width, int height) {
+static void frameBufferResizeCallback(GLFWwindow *window, int width, int height) {
   StrApp *app = glfwGetWindowUserPointer(window);
   app->frameBufferResized = true;
 }
@@ -853,8 +957,10 @@ StrApp *strAppCreate(int width, int height, const char *title) {
   app->window = window;
   app->currentFrame = 0;
   app->frameBufferResized = false;
+
   glfwSetWindowUserPointer(window, app);
   glfwSetFramebufferSizeCallback(window, frameBufferResizeCallback);
+
   createInstance(app);
   createSurface(app);
   pickPhysicalDevice(app);
@@ -866,6 +972,7 @@ StrApp *strAppCreate(int width, int height, const char *title) {
   createGraphicsPipeline(app);
   createFrameBuffers(app);
   createCommandPool(app);
+  createVertexBuffer(app);
   createCommandBuffers(app);
   createSyncObjects(app);
 
@@ -873,7 +980,7 @@ StrApp *strAppCreate(int width, int height, const char *title) {
 }
 
 void strAppRun(StrApp *app) {
-  while(!glfwWindowShouldClose(app->window)) {
+  while (!glfwWindowShouldClose(app->window)) {
     glfwPollEvents();
     drawFrame(app);
   }
@@ -891,6 +998,9 @@ void strTerminate() {
 
 void strAppFree(StrApp *app) {
   cleanupSwapChain(app);
+
+  vkDestroyBuffer(app->logicalDevice, app->vertexBuffer, NULL);
+  vkFreeMemory(app->logicalDevice, app->vertexBufferMemory, NULL);
 
   for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
     vkDestroySemaphore(app->logicalDevice, app->renderFinishedSemaphores[i], NULL);
