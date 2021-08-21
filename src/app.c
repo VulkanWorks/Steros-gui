@@ -13,6 +13,8 @@
 #define dbg_assert
 #endif
 
+#define STRS_INTERN static
+
 typedef struct {
   VkVertexInputAttributeDescription array[2];
   uint32_t size;
@@ -56,26 +58,26 @@ static uint16_t _indices[] = {
 };
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-void drawFrame(StrApp *app);
-void recreateSwapChain(StrApp *app);
-void cleanupSwapChain(StrApp *app);
-void createInstance(StrApp *app);
-void createSurface(StrApp *app);
-void pickPhysicalDevice(StrApp *app);
-void createLogicalDevice(StrApp *app);
-void createSwapChain(StrApp *app);
-void createImageViews(StrApp *app);
-void createRenderPass(StrApp *app);
-void createShaderModules(StrApp *app);
-void createGraphicsPipeline(StrApp *app);
-void createFrameBuffers(StrApp *app);
-void createCommandPool(StrApp *app);
-void createVertexBuffer(StrApp *app);
-void createIndexBuffer(StrApp *app);
-void createCommandBuffers(StrApp *app);
-void createSyncObjects(StrApp *app);
+STRS_INTERN void drawFrame(StrApp *app);
+STRS_INTERN void recreateSwapChain(StrApp *app);
+STRS_INTERN void cleanupSwapChain(StrApp *app);
+STRS_INTERN void createInstance(StrApp *app);
+STRS_INTERN void createSurface(StrApp *app);
+STRS_INTERN void pickPhysicalDevice(StrApp *app);
+STRS_INTERN void createLogicalDevice(StrApp *app);
+STRS_INTERN void createSwapChain(StrApp *app);
+STRS_INTERN void createImageViews(StrApp *app);
+STRS_INTERN void createRenderPass(StrApp *app);
+STRS_INTERN void createShaderModules(StrApp *app);
+STRS_INTERN void createGraphicsPipeline(StrApp *app);
+STRS_INTERN void createFrameBuffers(StrApp *app);
+STRS_INTERN void createCommandPool(StrApp *app);
+STRS_INTERN void createVertexBuffer(StrApp *app);
+STRS_INTERN void createIndexBuffer(StrApp *app);
+STRS_INTERN void createCommandBuffers(StrApp *app);
+STRS_INTERN void createSyncObjects(StrApp *app);
 
-static VkVertexInputAttributeDescriptionArray getAttributeDescriptions() {
+STRS_INTERN VkVertexInputAttributeDescriptionArray getAttributeDescriptions() {
   VkVertexInputAttributeDescriptionArray attributeDescriptions = {
     .array = {
       {
@@ -97,7 +99,7 @@ static VkVertexInputAttributeDescriptionArray getAttributeDescriptions() {
   return attributeDescriptions;
 }
 
-static VkVertexInputBindingDescription getBindingDescription() {
+STRS_INTERN VkVertexInputBindingDescription getBindingDescription() {
   VkVertexInputBindingDescription bindingDescription = {
     .binding = 0,
     .stride = sizeof(Vertex),
@@ -107,7 +109,7 @@ static VkVertexInputBindingDescription getBindingDescription() {
   return bindingDescription;
 }
 
-uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+STRS_INTERN uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
   VkPhysicalDeviceMemoryProperties memProperties;
   vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
@@ -120,12 +122,12 @@ uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, Vk
   exit(-1);
 }
 
-uint32_t clamp(uint32_t d, uint32_t min, uint32_t max) {
+STRS_INTERN uint32_t clamp(uint32_t d, uint32_t min, uint32_t max) {
   const uint32_t t = d < min ? min : d;
   return t > max ? max : t;
 }
 
-char *readShader(const char *filename, long *size) {
+STRS_INTERN char *readShader(const char *filename, long *size) {
   FILE *fp;
 
   fp = fopen(filename, "rb");
@@ -148,27 +150,27 @@ char *readShader(const char *filename, long *size) {
   return fileContents;
 }
 
-void swapChainSdFree(SwapChainSupportDetails *ptr) {
+STRS_INTERN void swapChainSdFree(SwapChainSupportDetails *ptr) {
   free(ptr->presentModes);
   free(ptr->formats);
   ptr = NULL;
 }
 
-void option_u_int_set_value(OptionUInt *ptr, uint32_t value) {
+STRS_INTERN void option_u_int_set_value(OptionUInt *ptr, uint32_t value) {
   ptr->value = value;
   ptr->hasValue = true;
 }
 
-void option_u_int_create(OptionUInt *ptr) {
+STRS_INTERN void option_u_int_create(OptionUInt *ptr) {
   ptr->hasValue = false;
   ptr->value = 0;
 }
 
-bool queueFamilyIndicesIsComplete(QueueFamilyIndices *indices) {
+STRS_INTERN bool queueFamilyIndicesIsComplete(QueueFamilyIndices *indices) {
   return indices->graphicsFamily.hasValue && indices->presentFamily.hasValue;
 }
 
-QueueFamilyIndices findQueueFamilyIndices(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
+STRS_INTERN QueueFamilyIndices findQueueFamilyIndices(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
   QueueFamilyIndices indices;
   option_u_int_create(&indices.graphicsFamily);
 
@@ -198,7 +200,7 @@ QueueFamilyIndices findQueueFamilyIndices(VkPhysicalDevice physicalDevice, VkSur
   return indices;
 }
 
-bool checkDeviceExtensionSupport(VkPhysicalDevice device) {// TODO: Finish this function
+STRS_INTERN bool checkDeviceExtensionSupport(VkPhysicalDevice device) {// TODO: Finish this function
   /*uint32_t extensionCount;
   vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
 
@@ -218,7 +220,7 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {// TODO: Finish this 
   return true;
 }
 
-SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
+STRS_INTERN SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
   SwapChainSupportDetails details;
 
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -244,7 +246,7 @@ SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurface
   return details;
 }
 
-bool isDeviceSuitable(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
+STRS_INTERN bool isDeviceSuitable(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
   QueueFamilyIndices indices = findQueueFamilyIndices(physicalDevice, surface);
 
   bool extensionsSupported = checkDeviceExtensionSupport(physicalDevice);
@@ -259,7 +261,7 @@ bool isDeviceSuitable(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
   return queueFamilyIndicesIsComplete(&indices) && swapChainAdequate;
 }
 
-VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *formats, uint32_t sizeOfArray) {
+STRS_INTERN VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *formats, uint32_t sizeOfArray) {
   for (int i = 0; i < sizeOfArray; i++) {
     if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
       return formats[i];
@@ -269,7 +271,7 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *formats, uint32_t
   return formats[0];
 }
 
-VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR *presentModes, uint32_t sizeOfArray) {
+STRS_INTERN VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR *presentModes, uint32_t sizeOfArray) {
   for (int i = 0; i < sizeOfArray; i++) {
     if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
       return presentModes[i];
@@ -279,7 +281,7 @@ VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR *presentModes, uint32_t 
   return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D chooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities, GLFWwindow *window) {
+STRS_INTERN VkExtent2D chooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities, GLFWwindow *window) {
   if (capabilities.currentExtent.width != UINT32_MAX) {
     return capabilities.currentExtent;
   } else {
@@ -300,7 +302,7 @@ VkExtent2D chooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities, GLFWwindow *w
   }
 }
 
-void createBuffer(StrApp *app, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+STRS_INTERN void createBuffer(StrApp *app, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
                   VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
   VkBufferCreateInfo bufferInfo = {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -327,7 +329,7 @@ void createBuffer(StrApp *app, VkDeviceSize size, VkBufferUsageFlags usage, VkMe
   vkBindBufferMemory(app->logicalDevice, *buffer, *bufferMemory, 0);
 }
 
-void copyBuffer(StrApp *app, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+STRS_INTERN void copyBuffer(StrApp *app, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
   VkCommandBufferAllocateInfo allocInfo = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
     .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -365,7 +367,7 @@ void copyBuffer(StrApp *app, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSiz
   vkFreeCommandBuffers(app->logicalDevice, app->commandPool, 1, &commandBuffer);
 }
 
-void createSyncObjects(StrApp *app) {
+STRS_INTERN void createSyncObjects(StrApp *app) {
   app->imageAvailableSemaphores = malloc(MAX_FRAMES_IN_FLIGHT);
   app->renderFinishedSemaphores = malloc(MAX_FRAMES_IN_FLIGHT);
   app->inFlightFences = malloc(MAX_FRAMES_IN_FLIGHT);
@@ -394,7 +396,7 @@ void createSyncObjects(StrApp *app) {
   }
 }
 
-void createCommandBuffers(StrApp *app) {
+STRS_INTERN void createCommandBuffers(StrApp *app) {
   app->commandBuffers = malloc(app->numberOfImages);
 
   VkCommandBufferAllocateInfo allocInfo = {
@@ -446,7 +448,7 @@ void createCommandBuffers(StrApp *app) {
   }
 }
 
-void createIndexBuffer(StrApp *app) {
+STRS_INTERN void createIndexBuffer(StrApp *app) {
   VkDeviceSize bufferSize = sizeof(_indices);
 
   VkBuffer stagingBuffer;
@@ -471,7 +473,7 @@ void createIndexBuffer(StrApp *app) {
   vkFreeMemory(app->logicalDevice, stagingBufferMemory, NULL);
 }
 
-void createVertexBuffer(StrApp *app) {
+STRS_INTERN void createVertexBuffer(StrApp *app) {
   VkDeviceSize bufferSize = sizeof(vertices);
 
   VkBuffer stagingBuffer;
@@ -497,7 +499,7 @@ void createVertexBuffer(StrApp *app) {
   vkFreeMemory(app->logicalDevice, stagingBufferMemory, NULL);
 }
 
-void createCommandPool(StrApp *app) {
+STRS_INTERN void createCommandPool(StrApp *app) {
   QueueFamilyIndices queueFamilyIndices = findQueueFamilyIndices(app->physicalDevice, app->surface);
 
   VkCommandPoolCreateInfo poolInfo = {
@@ -509,7 +511,7 @@ void createCommandPool(StrApp *app) {
   dbg_assert(result == VK_SUCCESS);
 }
 
-void createFrameBuffers(StrApp *app) {
+STRS_INTERN void createFrameBuffers(StrApp *app) {
   app->swapChainFrameBuffers = malloc(app->numberOfImages);
 
   for (size_t i = 0; i < app->numberOfImages; i++) {
@@ -533,7 +535,7 @@ void createFrameBuffers(StrApp *app) {
   }
 }
 
-void createGraphicsPipeline(StrApp *app) {
+STRS_INTERN void createGraphicsPipeline(StrApp *app) {
   VkPipelineShaderStageCreateInfo vertShaderStageInfo = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
     .stage = VK_SHADER_STAGE_VERTEX_BIT,
@@ -663,7 +665,7 @@ void createGraphicsPipeline(StrApp *app) {
   dbg_assert(result == VK_SUCCESS);
 }
 
-void createShaderModules(StrApp *app) {
+STRS_INTERN void createShaderModules(StrApp *app) {
   long vertSize = 0;
   long fragSize = 0;
   char *vertShaderCode = readShader("shaders/shader.vert.spv", &vertSize);
@@ -690,7 +692,7 @@ void createShaderModules(StrApp *app) {
   free(fragShaderCode);
 }
 
-void createRenderPass(StrApp *app) {
+STRS_INTERN void createRenderPass(StrApp *app) {
   VkAttachmentDescription colorAttachment = {
     .format = app->swapChainImageFormat,
     .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -737,7 +739,7 @@ void createRenderPass(StrApp *app) {
   dbg_assert(result == VK_SUCCESS);
 }
 
-void createImageViews(StrApp *app) {
+STRS_INTERN void createImageViews(StrApp *app) {
   app->swapChainImageViews = malloc(app->numberOfImages);
 
   for (size_t i = 0; i < app->numberOfImages; i++) {
@@ -763,7 +765,7 @@ void createImageViews(StrApp *app) {
   }
 }
 
-void createSwapChain(StrApp *app) {
+STRS_INTERN void createSwapChain(StrApp *app) {
   SwapChainSupportDetails swapChainSupport = querySwapChainSupport(app->physicalDevice, app->surface);
 
   VkSurfaceFormatKHR surfaceFormat =
@@ -820,7 +822,7 @@ void createSwapChain(StrApp *app) {
   swapChainSdFree(&swapChainSupport);
 }
 
-void createLogicalDevice(StrApp *app) {
+STRS_INTERN void createLogicalDevice(StrApp *app) {
   QueueFamilyIndices indices = findQueueFamilyIndices(app->physicalDevice, app->surface);
 
   VkDeviceQueueCreateInfo *queueCreateInfos;
@@ -882,7 +884,7 @@ void createLogicalDevice(StrApp *app) {
   free(queueCreateInfos);
 }
 
-void pickPhysicalDevice(StrApp *app) {
+STRS_INTERN void pickPhysicalDevice(StrApp *app) {
   uint32_t deviceCount = 0;
   vkEnumeratePhysicalDevices(app->instance, &deviceCount, NULL);
   dbg_assert(deviceCount != 0);
@@ -902,11 +904,11 @@ void pickPhysicalDevice(StrApp *app) {
   exit(-1);
 }
 
-void createSurface(StrApp *app) {
+STRS_INTERN void createSurface(StrApp *app) {
   glfwCreateWindowSurface(app->instance, app->window, NULL, &app->surface);
 }
 
-void createInstance(StrApp *app) {
+STRS_INTERN void createInstance(StrApp *app) {
   VkApplicationInfo appInfo = {
     .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
     .pNext = NULL,
@@ -938,7 +940,7 @@ void createInstance(StrApp *app) {
   dbg_assert(result == VK_SUCCESS);
 }
 
-void cleanupSwapChain(StrApp *app) {
+STRS_INTERN void cleanupSwapChain(StrApp *app) {
   for (size_t i = 0; i < app->numberOfImages; i++) {
     vkDestroyFramebuffer(app->logicalDevice, app->swapChainFrameBuffers[i], NULL);
   }
@@ -960,7 +962,7 @@ void cleanupSwapChain(StrApp *app) {
   free(app->swapChainImages);
 }
 
-void recreateSwapChain(StrApp *app) {
+STRS_INTERN void recreateSwapChain(StrApp *app) {
   int width = 0, height = 0;
   glfwGetFramebufferSize(app->window, &width, &height);
   while (width == 0 || height == 0) {
@@ -979,7 +981,7 @@ void recreateSwapChain(StrApp *app) {
   createCommandBuffers(app);
 }
 
-void drawFrame(StrApp *app) {
+STRS_INTERN void drawFrame(StrApp *app) {
   vkWaitForFences(app->logicalDevice, 1, &app->inFlightFences[app->currentFrame], VK_TRUE, UINT64_MAX);
 
   uint32_t imageIndex = 0;
@@ -1050,7 +1052,7 @@ static void frameBufferResizeCallback(GLFWwindow *window, int width, int height)
   app->frameBufferResized = true;
 }
 
-StrApp *strAppCreate(int width, int height, const char *title) {
+STRS_LIB StrApp *strAppCreate(int width, int height, const char *title) {
   if (!init) {
     return NULL;
   }
@@ -1086,7 +1088,7 @@ StrApp *strAppCreate(int width, int height, const char *title) {
   return app;
 }
 
-void strAppRun(StrApp *app) {
+STRS_LIB void strAppRun(StrApp *app) {
   while (!glfwWindowShouldClose(app->window)) {
     glfwPollEvents();
     drawFrame(app);
@@ -1094,16 +1096,16 @@ void strAppRun(StrApp *app) {
   vkDeviceWaitIdle(app->logicalDevice);
 }
 
-int strInit() {
+STRS_LIB int strInit() {
   init = true;
   return glfwInit();
 }
 
-void strTerminate() {
+STRS_LIB void strTerminate() {
   glfwTerminate();
 }
 
-void strAppFree(StrApp *app) {
+STRS_LIB void strAppFree(StrApp *app) {
   cleanupSwapChain(app);
 
   vkDestroyBuffer(app->logicalDevice, app->indexBuffer, NULL);

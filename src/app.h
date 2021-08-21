@@ -6,6 +6,8 @@
 
 #include <stdbool.h>
 
+#define STRS_LIB
+
 typedef struct {
     GLFWwindow* window;
 
@@ -44,10 +46,10 @@ typedef struct {
     bool frameBufferResized;
 } StrApp;
 
-int strInit();
-StrApp* strAppCreate(int width, int height, const char* title);
-void strAppRun(StrApp *app);
-void strAppFree(StrApp* app);
-void strTerminate();
+STRS_LIB int strInit();
+STRS_LIB StrApp* strAppCreate(int width, int height, const char* title);
+STRS_LIB void strAppRun(StrApp *app);
+STRS_LIB void strAppFree(StrApp* app);
+STRS_LIB void strTerminate();
 
 #endif //STEROS_APP_H
