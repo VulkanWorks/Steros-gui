@@ -450,9 +450,9 @@ void createVertexBuffer(StrApp *app) {
                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
 
   void *data;
-  vkMapMemory(app->logicalDevice, app->vertexBufferMemory, 0, bufferSize, 0, &data);
+  vkMapMemory(app->logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
   memcpy(data, vertices, (size_t) bufferSize);
-  vkUnmapMemory(app->logicalDevice, app->vertexBufferMemory);
+  vkUnmapMemory(app->logicalDevice, stagingBufferMemory);
 
   createBuffer(app, bufferSize,
                VK_BUFFER_USAGE_TRANSFER_DST_BIT |
