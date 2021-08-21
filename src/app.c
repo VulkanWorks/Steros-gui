@@ -295,6 +295,33 @@ VkExtent2D chooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities, GLFWwindow *w
   }
 }
 
+void createBuffer(StrApp *app, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+                  VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
+  VkBufferCreateInfo bufferInfo = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .size = size,
+    .usage = usage,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+  };
+
+  VkResult result = vkCreateBuffer(app->logicalDevice, &bufferInfo, NULL, buffer);
+  dbg_assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements memRequirements;
+  vkGetBufferMemoryRequirements(app->logicalDevice, *buffer, &memRequirements);
+
+  VkMemoryAllocateInfo allocInfo = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = memRequirements.size,
+    .memoryTypeIndex = findMemoryType(app->physicalDevice, memRequirements.memoryTypeBits, properties)
+  };
+
+  result = vkAllocateMemory(app->logicalDevice, &allocInfo, NULL, bufferMemory);
+  dbg_assert(result == VK_SUCCESS);
+
+  vkBindBufferMemory(app->logicalDevice, *buffer, *bufferMemory, 0);
+}
+
 void createSyncObjects(StrApp *app) {
   app->imageAvailableSemaphores = malloc(MAX_FRAMES_IN_FLIGHT);
   app->renderFinishedSemaphores = malloc(MAX_FRAMES_IN_FLIGHT);
@@ -375,35 +402,15 @@ void createCommandBuffers(StrApp *app) {
 }
 
 void createVertexBuffer(StrApp *app) {
-  VkBufferCreateInfo bufferInfo = {
-    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-    .size = sizeof(vertices),
-    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-    .sharingMode = VK_SHARING_MODE_EXCLUSIVE
-  };
-
-  VkResult result = vkCreateBuffer(app->logicalDevice, &bufferInfo, NULL, &app->vertexBuffer);
-  dbg_assert(result == VK_SUCCESS);
-
-  VkMemoryRequirements memRequirements;
-  vkGetBufferMemoryRequirements(app->logicalDevice, app->vertexBuffer, &memRequirements);
-
-  VkMemoryAllocateInfo allocInfo = {
-    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .allocationSize = memRequirements.size,
-    .memoryTypeIndex = findMemoryType(app->physicalDevice,
-                                      memRequirements.memoryTypeBits,
-                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  };
-
-  result = vkAllocateMemory(app->logicalDevice, &allocInfo, NULL, &app->vertexBufferMemory);
-  dbg_assert(result == VK_SUCCESS);
-
-  vkBindBufferMemory(app->logicalDevice, app->vertexBuffer, app->vertexBufferMemory, 0);
+  VkDeviceSize bufferSize = sizeof(vertices);
+  createBuffer(app, bufferSize,
+               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+               VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &app->vertexBuffer, &app->vertexBufferMemory);
 
   void *data;
-  vkMapMemory(app->logicalDevice, app->vertexBufferMemory, 0, bufferInfo.size, 0, &data);
-  memcpy(data, vertices, (size_t) bufferInfo.size);
+  vkMapMemory(app->logicalDevice, app->vertexBufferMemory, 0, bufferSize, 0, &data);
+  memcpy(data, vertices, (size_t) bufferSize);
   vkUnmapMemory(app->logicalDevice, app->vertexBufferMemory);
 }
 
