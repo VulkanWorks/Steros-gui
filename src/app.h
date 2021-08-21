@@ -37,6 +37,8 @@ typedef struct {
 
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
 
     size_t currentFrame;
     bool frameBufferResized;

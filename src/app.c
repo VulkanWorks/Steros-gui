@@ -46,9 +46,13 @@ static bool enableValidationLayers = true;
 static const char *validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 static const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 static Vertex vertices[] = {
-  {{0.0f,  -0.5f}, {0.5f, 0.5f, 1.0f}},
-  {{0.5f,  0.5f},  {0.0f, 1.0f, 0.5f}},
-  {{-0.5f, 0.5f},  {3.0f, 7.0f, 1.0f}}
+  {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+  {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+  {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+  {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
+static uint16_t _indices[] = {
+  0, 1, 2, 2, 3, 0
 };
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -67,6 +71,7 @@ void createGraphicsPipeline(StrApp *app);
 void createFrameBuffers(StrApp *app);
 void createCommandPool(StrApp *app);
 void createVertexBuffer(StrApp *app);
+void createIndexBuffer(StrApp *app);
 void createCommandBuffers(StrApp *app);
 void createSyncObjects(StrApp *app);
 
@@ -430,13 +435,40 @@ void createCommandBuffers(StrApp *app) {
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(app->commandBuffers[i], 0, 1, vertexBuffers, offsets);
 
-    vkCmdDraw(app->commandBuffers[i], 3, 1, 0, 0);
+    vkCmdBindIndexBuffer(app->commandBuffers[i], app->indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+    vkCmdDrawIndexed(app->commandBuffers[i], sizeof(_indices) / sizeof(uint16_t), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(app->commandBuffers[i]);
 
     result = vkEndCommandBuffer(app->commandBuffers[i]);
     dbg_assert(result == VK_SUCCESS);
   }
+}
+
+void createIndexBuffer(StrApp *app) {
+  VkDeviceSize bufferSize = sizeof(_indices);
+
+  VkBuffer stagingBuffer;
+  VkDeviceMemory stagingBufferMemory;
+  createBuffer(app, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+               &stagingBuffer, &stagingBufferMemory);
+
+  void* data;
+  vkMapMemory(app->logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+  memcpy(data, _indices, (size_t) bufferSize);
+  vkUnmapMemory(app->logicalDevice, stagingBufferMemory);
+
+  createBuffer(app, bufferSize,
+               VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+               VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &app->indexBuffer, &app->indexBufferMemory);
+
+  copyBuffer(app, stagingBuffer, app->indexBuffer, bufferSize);
+
+  vkDestroyBuffer(app->logicalDevice, stagingBuffer, NULL);
+  vkFreeMemory(app->logicalDevice, stagingBufferMemory, NULL);
 }
 
 void createVertexBuffer(StrApp *app) {
@@ -1047,6 +1079,7 @@ StrApp *strAppCreate(int width, int height, const char *title) {
   createFrameBuffers(app);
   createCommandPool(app);
   createVertexBuffer(app);
+  createIndexBuffer(app);
   createCommandBuffers(app);
   createSyncObjects(app);
 
@@ -1072,6 +1105,9 @@ void strTerminate() {
 
 void strAppFree(StrApp *app) {
   cleanupSwapChain(app);
+
+  vkDestroyBuffer(app->logicalDevice, app->indexBuffer, NULL);
+  vkFreeMemory(app->logicalDevice, app->indexBufferMemory, NULL);
 
   vkDestroyBuffer(app->logicalDevice, app->vertexBuffer, NULL);
   vkFreeMemory(app->logicalDevice, app->vertexBufferMemory, NULL);
