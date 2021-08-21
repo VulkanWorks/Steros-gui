@@ -52,6 +52,24 @@ static Vertex vertices[] = {
 };
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
+void drawFrame(StrApp *app);
+void recreateSwapChain(StrApp *app);
+void cleanupSwapChain(StrApp *app);
+void createInstance(StrApp *app);
+void createSurface(StrApp *app);
+void pickPhysicalDevice(StrApp *app);
+void createLogicalDevice(StrApp *app);
+void createSwapChain(StrApp *app);
+void createImageViews(StrApp *app);
+void createRenderPass(StrApp *app);
+void createShaderModules(StrApp *app);
+void createGraphicsPipeline(StrApp *app);
+void createFrameBuffers(StrApp *app);
+void createCommandPool(StrApp *app);
+void createVertexBuffer(StrApp *app);
+void createCommandBuffers(StrApp *app);
+void createSyncObjects(StrApp *app);
+
 static VkVertexInputAttributeDescriptionArray getAttributeDescriptions() {
   VkVertexInputAttributeDescriptionArray attributeDescriptions = {
     .array = {
