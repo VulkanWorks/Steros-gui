@@ -5,8 +5,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <string.h>
-#include <cglm/vec2.h>
-#include <cglm/vec3.h>
+#include <la.h>
 
 #ifndef NDEBUG
 #define dbg_assert(x) assert(x)
@@ -20,8 +19,8 @@ typedef struct {
 } VkVertexInputAttributeDescriptionArray;
 
 typedef struct {
-  vec2 pos;
-  vec3 color;
+  V2f pos;
+  V3f color;
 } Vertex;
 
 typedef struct {
@@ -46,10 +45,10 @@ static bool init = false;
 static bool enableValidationLayers = true;
 static const char *validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 static const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-const Vertex vertices[] = {
-  {{0.0f,  -0.5f}, {1.0f, 1.0f, 1.0f}},
-  {{0.5f,  0.5f},  {0.0f, 1.0f, 0.0f}},
-  {{-0.5f, 0.5f},  {0.0f, 0.0f, 1.0f}}
+static Vertex vertices[] = {
+  {{0.0f,  -0.5f}, {0.5f, 0.5f, 1.0f}},
+  {{0.5f,  0.5f},  {0.0f, 1.0f, 0.5f}},
+  {{-0.5f, 0.5f},  {3.0f, 7.0f, 1.0f}}
 };
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -129,7 +128,6 @@ char *readShader(const char *filename, long *size) {
 void swapChainSdFree(SwapChainSupportDetails *ptr) {
   free(ptr->presentModes);
   free(ptr->formats);
-  free(ptr);
   ptr = NULL;
 }
 
@@ -197,27 +195,27 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {// TODO: Finish this 
   return true;
 }
 
-SwapChainSupportDetails *querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
-  SwapChainSupportDetails *details = malloc(sizeof(SwapChainSupportDetails));
+SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
+  SwapChainSupportDetails details;
 
-  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details->capabilities);
+  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
 
   uint32_t formatCount;
   vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, NULL);
 
   if (formatCount != 0) {
-    details->formatsSize = formatCount;
-    details->formats = malloc(sizeof(uint32_t) * formatCount);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details->formats);
+    details.formatsSize = formatCount;
+    details.formats = malloc(sizeof(uint32_t) * formatCount);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats);
   }
 
   uint32_t presentModeCount;
   vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, NULL);
 
   if (presentModeCount != 0) {
-    details->presentModesSize = presentModeCount;
-    details->presentModes = malloc(sizeof(uint32_t) * presentModeCount);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details->presentModes);
+    details.presentModesSize = presentModeCount;
+    details.presentModes = malloc(sizeof(uint32_t) * presentModeCount);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes);
   }
 
   return details;
@@ -230,9 +228,9 @@ bool isDeviceSuitable(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
 
   bool swapChainAdequate = false;
   if (extensionsSupported) {
-    SwapChainSupportDetails *swapChainSupport = querySwapChainSupport(physicalDevice, surface);
-    swapChainAdequate = swapChainSupport->formats != NULL && swapChainSupport->presentModes != NULL;
-    swapChainSdFree(swapChainSupport);
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
+    swapChainAdequate = swapChainSupport.formats != NULL && swapChainSupport.presentModes != NULL;
+    swapChainSdFree(&swapChainSupport);
   }
 
   return queueFamilyIndicesIsComplete(&indices) && swapChainAdequate;
@@ -658,17 +656,17 @@ void createImageViews(StrApp *app) {
 }
 
 void createSwapChain(StrApp *app) {
-  SwapChainSupportDetails *swapChainSupport = querySwapChainSupport(app->physicalDevice, app->surface);
+  SwapChainSupportDetails swapChainSupport = querySwapChainSupport(app->physicalDevice, app->surface);
 
   VkSurfaceFormatKHR surfaceFormat =
-    chooseSwapSurfaceFormat(swapChainSupport->formats, swapChainSupport->formatsSize);
+    chooseSwapSurfaceFormat(swapChainSupport.formats, swapChainSupport.formatsSize);
   VkPresentModeKHR presentMode =
-    chooseSwapPresentMode(swapChainSupport->presentModes, swapChainSupport->presentModesSize);
-  VkExtent2D extent = chooseSwapExtent(swapChainSupport->capabilities, app->window);
+    chooseSwapPresentMode(swapChainSupport.presentModes, swapChainSupport.presentModesSize);
+  VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, app->window);
 
-  uint32_t imageCount = swapChainSupport->capabilities.minImageCount + 1;
-  if (swapChainSupport->capabilities.maxImageCount > 0 && imageCount > swapChainSupport->capabilities.maxImageCount) {
-    imageCount = swapChainSupport->capabilities.maxImageCount;
+  uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+  if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+    imageCount = swapChainSupport.capabilities.maxImageCount;
   }
 
   VkSwapchainCreateInfoKHR createInfo = {
@@ -693,7 +691,7 @@ void createSwapChain(StrApp *app) {
     createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
   }
 
-  createInfo.preTransform = swapChainSupport->capabilities.currentTransform;
+  createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
   createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
   createInfo.presentMode = presentMode;
   createInfo.clipped = VK_TRUE;
@@ -711,7 +709,7 @@ void createSwapChain(StrApp *app) {
   app->swapChainExtent = extent;
   app->numberOfImages = imageCount;
 
-  swapChainSdFree(swapChainSupport);
+  swapChainSdFree(&swapChainSupport);
 }
 
 void createLogicalDevice(StrApp *app) {
