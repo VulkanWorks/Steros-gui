@@ -7,7 +7,6 @@
 #include <string.h>
 #include <cglm/cglm.h>
 #include <cglm/affine.h>
-#include <time.h>
 
 #ifndef NDEBUG
 #define dbg_assert(x) assert(x)
@@ -67,7 +66,7 @@ static uint16_t indices[] = {
 };
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-static time_t startTime;
+static float timePassed;
 static bool timeInitialized = false;
 
 STRS_INTERN void drawFrame(StrApp *app);
@@ -89,6 +88,7 @@ STRS_INTERN void createVertexBuffer(StrApp *app);
 STRS_INTERN void createIndexBuffer(StrApp *app);
 STRS_INTERN void createUniformBuffers(StrApp *app);
 STRS_INTERN void createDescriptorPool(StrApp *app);
+STRS_INTERN void createDescriptorSets(StrApp *app);
 STRS_INTERN void createCommandBuffers(StrApp *app);
 STRS_INTERN void createSyncObjects(StrApp *app);
 
@@ -1001,7 +1001,13 @@ STRS_INTERN void createInstance(StrApp *app) {
 STRS_INTERN void cleanupSwapChain(StrApp *app) {
   for (size_t i = 0; i < app->numberOfImages; i++) {
     vkDestroyFramebuffer(app->logicalDevice, app->swapChainFrameBuffers[i], NULL);
+    vkDestroyBuffer(app->logicalDevice, app->uniformBuffers[i], NULL);
+    vkFreeMemory(app->logicalDevice, app->uniformBuffersMemory[i], NULL);
+    app->uniformBuffers[i] = NULL;
+    app->uniformBuffersMemory[i] = NULL;
   }
+
+  vkDestroyDescriptorPool(app->logicalDevice, app->descriptorPool, NULL);
 
   vkFreeCommandBuffers(app->logicalDevice, app->commandPool, app->numberOfImages, app->commandBuffers);
 
@@ -1037,6 +1043,8 @@ STRS_INTERN void recreateSwapChain(StrApp *app) {
   createGraphicsPipeline(app);
   createFrameBuffers(app);
   createUniformBuffers(app);
+  createDescriptorPool(app);
+  createDescriptorSets(app);
   createCommandBuffers(app);
 }
 
@@ -1109,20 +1117,14 @@ STRS_INTERN void drawFrame(StrApp *app) {
 }
 
 void updateUniformBuffers(StrApp *app, uint32_t currentImage) {
-  if(!timeInitialized) {
-    startTime = time(NULL);
-    timeInitialized = true;
-  }
-
-  time_t currentTime = time(NULL);
-  float time = (float)difftime(startTime, currentTime);
+  timePassed += 0.01f;
 
   UniformBufferObject ubo = {0};
   ubo.model[0][0] = 1.0f;
   ubo.model[1][1] = 1.0f;
   ubo.model[2][2] = 1.0f;
   ubo.model[3][3] = 1.0f;
-  glm_rotate(ubo.model, (float)(time * toRadians(90.0f)), (vec3){0.0f, 0.0f, 1.0f});
+  glm_rotate(ubo.model, (float)(timePassed * toRadians(90.0f)), (vec3){0.0f, 0.0f, 1.0f});
   glm_lookat((vec3){2.0f, 2.0f, 2.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f}, ubo.view);
   glm_perspective((float)toRadians(45.0f),
                   (float)app->swapChainExtent.width / (float) app->swapChainExtent.height,
