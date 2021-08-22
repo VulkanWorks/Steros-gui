@@ -67,7 +67,6 @@ static uint16_t indices[] = {
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 static float timePassed;
-static bool timeInitialized = false;
 
 STRS_INTERN void drawFrame(StrApp *app);
 STRS_INTERN void recreateSwapChain(StrApp *app);
@@ -187,8 +186,8 @@ STRS_INTERN void option_u_int_create(OptionUInt *ptr) {
   ptr->value = 0;
 }
 
-STRS_INTERN bool queueFamilyIndicesIsComplete(QueueFamilyIndices *indices) {
-  return indices->graphicsFamily.hasValue && indices->presentFamily.hasValue;
+STRS_INTERN bool queueFamilyIndicesIsComplete(QueueFamilyIndices *_indices) {
+  return _indices->graphicsFamily.hasValue && _indices->presentFamily.hasValue;
 }
 
 STRS_INTERN QueueFamilyIndices findQueueFamilyIndices(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
@@ -251,7 +250,7 @@ STRS_INTERN SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice devic
 
   if (formatCount != 0) {
     details.formatsSize = formatCount;
-    details.formats = malloc(sizeof(uint32_t) * formatCount);
+    details.formats = malloc(sizeof(VkSurfaceFormatKHR) * formatCount);
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats);
   }
 
@@ -283,7 +282,7 @@ STRS_INTERN bool isDeviceSuitable(VkPhysicalDevice physicalDevice, VkSurfaceKHR 
 }
 
 STRS_INTERN VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *formats, uint32_t sizeOfArray) {
-  for (int i = 0; i < sizeOfArray; i++) {
+  for (uint32_t i = 0; i < sizeOfArray; i++) {
     if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
       return formats[i];
     }
