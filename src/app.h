@@ -24,12 +24,20 @@ typedef struct {
     VkExtent2D swapChainExtent;
     VkImageView *swapChainImageViews;
     VkRenderPass renderPass;
+
     VkShaderModule vertShaderModule;
     VkShaderModule fragShaderModule;
+
+    VkDescriptorSetLayout descriptorSetLayout;
+
     VkPipelineLayout pipelineLayout;
     VkPipeline pipeline;
     VkFramebuffer *swapChainFrameBuffers;
     VkCommandPool commandPool;
+
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet* descriptorSets;
+
     VkCommandBuffer *commandBuffers;
 
     VkSemaphore* imageAvailableSemaphores;
@@ -41,6 +49,8 @@ typedef struct {
     VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+    VkBuffer* uniformBuffers;
+    VkDeviceMemory* uniformBuffersMemory;
 
     size_t currentFrame;
     bool frameBufferResized;

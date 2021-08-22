@@ -5,15 +5,25 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <string.h>
-#include <la.h>
+#include <cglm/cglm.h>
+#include <cglm/affine.h>
+#include <time.h>
 
 #ifndef NDEBUG
 #define dbg_assert(x) assert(x)
+static bool enableValidationLayers = true;
 #else
 #define dbg_assert
+static bool enableValidationLayers = false;
 #endif
 
 #define STRS_INTERN static
+
+typedef struct {
+  mat4 model;
+  mat4 view;
+  mat4 proj;
+} UniformBufferObject;
 
 typedef struct {
   VkVertexInputAttributeDescription array[2];
@@ -21,8 +31,8 @@ typedef struct {
 } VkVertexInputAttributeDescriptionArray;
 
 typedef struct {
-  V2f pos;
-  V3f color;
+  vec2 pos;
+  vec3 color;
 } Vertex;
 
 typedef struct {
@@ -44,7 +54,6 @@ typedef struct {
 } QueueFamilyIndices;
 
 static bool init = false;
-static bool enableValidationLayers = true;
 static const char *validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 static const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 static Vertex vertices[] = {
@@ -53,10 +62,13 @@ static Vertex vertices[] = {
   {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
   {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
 };
-static uint16_t _indices[] = {
+static uint16_t indices[] = {
   0, 1, 2, 2, 3, 0
 };
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
+static time_t startTime;
+static bool timeInitialized = false;
 
 STRS_INTERN void drawFrame(StrApp *app);
 STRS_INTERN void recreateSwapChain(StrApp *app);
@@ -69,13 +81,22 @@ STRS_INTERN void createSwapChain(StrApp *app);
 STRS_INTERN void createImageViews(StrApp *app);
 STRS_INTERN void createRenderPass(StrApp *app);
 STRS_INTERN void createShaderModules(StrApp *app);
+STRS_INTERN void createDescriptorSetLayout(StrApp *app);
 STRS_INTERN void createGraphicsPipeline(StrApp *app);
 STRS_INTERN void createFrameBuffers(StrApp *app);
 STRS_INTERN void createCommandPool(StrApp *app);
 STRS_INTERN void createVertexBuffer(StrApp *app);
 STRS_INTERN void createIndexBuffer(StrApp *app);
+STRS_INTERN void createUniformBuffers(StrApp *app);
+STRS_INTERN void createDescriptorPool(StrApp *app);
 STRS_INTERN void createCommandBuffers(StrApp *app);
 STRS_INTERN void createSyncObjects(StrApp *app);
+
+STRS_INTERN void updateUniformBuffers(StrApp *app, uint32_t currentImage);
+
+STRS_INTERN double toRadians(double degrees) {
+  return degrees * M_PI / 180.0;
+}
 
 STRS_INTERN VkVertexInputAttributeDescriptionArray getAttributeDescriptions() {
   VkVertexInputAttributeDescriptionArray attributeDescriptions = {
@@ -142,7 +163,7 @@ STRS_INTERN char *readShader(const char *filename, long *size) {
     exit(-1);
   }
 
-  char *fileContents = malloc(sb.st_size);
+  char *fileContents = malloc(sizeof(char) * sb.st_size);
   fread(fileContents, sb.st_size, 1, fp);
 
   fclose(fp);
@@ -171,8 +192,8 @@ STRS_INTERN bool queueFamilyIndicesIsComplete(QueueFamilyIndices *indices) {
 }
 
 STRS_INTERN QueueFamilyIndices findQueueFamilyIndices(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
-  QueueFamilyIndices indices;
-  option_u_int_create(&indices.graphicsFamily);
+  QueueFamilyIndices queueFamilyIndices;
+  option_u_int_create(&queueFamilyIndices.graphicsFamily);
 
   uint32_t queueFamilyCount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
@@ -182,22 +203,22 @@ STRS_INTERN QueueFamilyIndices findQueueFamilyIndices(VkPhysicalDevice physicalD
 
   for (int i = 0; i < queueFamilyCount; i++) {
     if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-      option_u_int_set_value(&indices.graphicsFamily, i);
+      option_u_int_set_value(&queueFamilyIndices.graphicsFamily, i);
     }
 
     VkBool32 presentSupport = false;
     vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
 
     if (presentSupport) {
-      option_u_int_set_value(&indices.presentFamily, i);
+      option_u_int_set_value(&queueFamilyIndices.presentFamily, i);
     }
 
-    if (queueFamilyIndicesIsComplete(&indices)) {
+    if (queueFamilyIndicesIsComplete(&queueFamilyIndices)) {
       break;
     }
   }
   free(queueFamilies);
-  return indices;
+  return queueFamilyIndices;
 }
 
 STRS_INTERN bool checkDeviceExtensionSupport(VkPhysicalDevice device) {// TODO: Finish this function
@@ -247,7 +268,7 @@ STRS_INTERN SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice devic
 }
 
 STRS_INTERN bool isDeviceSuitable(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
-  QueueFamilyIndices indices = findQueueFamilyIndices(physicalDevice, surface);
+  QueueFamilyIndices queueFamilyIndices = findQueueFamilyIndices(physicalDevice, surface);
 
   bool extensionsSupported = checkDeviceExtensionSupport(physicalDevice);
 
@@ -258,7 +279,7 @@ STRS_INTERN bool isDeviceSuitable(VkPhysicalDevice physicalDevice, VkSurfaceKHR 
     swapChainSdFree(&swapChainSupport);
   }
 
-  return queueFamilyIndicesIsComplete(&indices) && swapChainAdequate;
+  return queueFamilyIndicesIsComplete(&queueFamilyIndices) && swapChainAdequate;
 }
 
 STRS_INTERN VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR *formats, uint32_t sizeOfArray) {
@@ -368,10 +389,10 @@ STRS_INTERN void copyBuffer(StrApp *app, VkBuffer srcBuffer, VkBuffer dstBuffer,
 }
 
 STRS_INTERN void createSyncObjects(StrApp *app) {
-  app->imageAvailableSemaphores = malloc(MAX_FRAMES_IN_FLIGHT);
-  app->renderFinishedSemaphores = malloc(MAX_FRAMES_IN_FLIGHT);
-  app->inFlightFences = malloc(MAX_FRAMES_IN_FLIGHT);
-  app->imagesInFlight = malloc(app->numberOfImages);
+  app->imageAvailableSemaphores = malloc(sizeof(VkSemaphore*) * MAX_FRAMES_IN_FLIGHT);
+  app->renderFinishedSemaphores = malloc(sizeof(VkSemaphore*) * MAX_FRAMES_IN_FLIGHT);
+  app->inFlightFences = malloc(sizeof(VkFence*) * MAX_FRAMES_IN_FLIGHT);
+  app->imagesInFlight = malloc(sizeof(VkFence*) * app->numberOfImages);
 
   VkSemaphoreCreateInfo semaphoreInfo = {
     .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
@@ -397,7 +418,7 @@ STRS_INTERN void createSyncObjects(StrApp *app) {
 }
 
 STRS_INTERN void createCommandBuffers(StrApp *app) {
-  app->commandBuffers = malloc(app->numberOfImages);
+  app->commandBuffers = malloc(sizeof(VkCommandBuffer*) * app->numberOfImages);
 
   VkCommandBufferAllocateInfo allocInfo = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -439,7 +460,9 @@ STRS_INTERN void createCommandBuffers(StrApp *app) {
 
     vkCmdBindIndexBuffer(app->commandBuffers[i], app->indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-    vkCmdDrawIndexed(app->commandBuffers[i], sizeof(_indices) / sizeof(uint16_t), 1, 0, 0, 0);
+    vkCmdBindDescriptorSets(app->commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            app->pipelineLayout, 0, 1, &app->descriptorSets[i], 0, NULL);
+    vkCmdDrawIndexed(app->commandBuffers[i], sizeof(indices) / sizeof(uint16_t), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(app->commandBuffers[i]);
 
@@ -448,8 +471,23 @@ STRS_INTERN void createCommandBuffers(StrApp *app) {
   }
 }
 
+STRS_INTERN void createUniformBuffers(StrApp *app) {
+  VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+  app->uniformBuffers = malloc(sizeof(VkBuffer*) * app->numberOfImages);
+  app->uniformBuffersMemory = malloc(sizeof(VkDeviceMemory*) * app->numberOfImages);
+
+  for (size_t i = 0; i < app->numberOfImages; i++) {
+    createBuffer(app, bufferSize,
+                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 &app->uniformBuffers[i], &app->uniformBuffersMemory[i]);
+  }
+}
+
 STRS_INTERN void createIndexBuffer(StrApp *app) {
-  VkDeviceSize bufferSize = sizeof(_indices);
+  VkDeviceSize bufferSize = sizeof(indices);
 
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
@@ -459,7 +497,7 @@ STRS_INTERN void createIndexBuffer(StrApp *app) {
 
   void* data;
   vkMapMemory(app->logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-  memcpy(data, _indices, (size_t) bufferSize);
+  memcpy(data, indices, (size_t) bufferSize);
   vkUnmapMemory(app->logicalDevice, stagingBufferMemory);
 
   createBuffer(app, bufferSize,
@@ -512,7 +550,7 @@ STRS_INTERN void createCommandPool(StrApp *app) {
 }
 
 STRS_INTERN void createFrameBuffers(StrApp *app) {
-  app->swapChainFrameBuffers = malloc(app->numberOfImages);
+  app->swapChainFrameBuffers = malloc(sizeof(VkFramebuffer*) * app->numberOfImages);
 
   for (size_t i = 0; i < app->numberOfImages; i++) {
     VkImageView attachments[] = {
@@ -598,7 +636,7 @@ STRS_INTERN void createGraphicsPipeline(StrApp *app) {
     .polygonMode = VK_POLYGON_MODE_FILL,
     .lineWidth = 1.0f,
     .cullMode = VK_CULL_MODE_BACK_BIT,
-    .frontFace = VK_FRONT_FACE_CLOCKWISE,
+    .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
     .depthBiasEnable = VK_FALSE
   };
 
@@ -630,8 +668,9 @@ STRS_INTERN void createGraphicsPipeline(StrApp *app) {
 
   VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-    .setLayoutCount = 0,
-    .pushConstantRangeCount = 0
+    .setLayoutCount = 1,
+    .pSetLayouts = &app->descriptorSetLayout,
+    .pushConstantRangeCount = 0,
   };
 
   VkResult result =
@@ -662,6 +701,25 @@ STRS_INTERN void createGraphicsPipeline(StrApp *app) {
       &pipelineInfo,
       NULL,
       &app->pipeline);
+  dbg_assert(result == VK_SUCCESS);
+}
+
+STRS_INTERN void createDescriptorSetLayout(StrApp *app) {
+  VkDescriptorSetLayoutBinding uboLayoutBinding = {
+    .binding = 0,
+    .descriptorCount = 1,
+    .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    .pImmutableSamplers = NULL,
+    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+  };
+
+  VkDescriptorSetLayoutCreateInfo layoutInfo = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+    .bindingCount = 1,
+    .pBindings = &uboLayoutBinding
+  };
+
+  VkResult result = vkCreateDescriptorSetLayout(app->logicalDevice, &layoutInfo, NULL, &app->descriptorSetLayout);
   dbg_assert(result == VK_SUCCESS);
 }
 
@@ -740,7 +798,7 @@ STRS_INTERN void createRenderPass(StrApp *app) {
 }
 
 STRS_INTERN void createImageViews(StrApp *app) {
-  app->swapChainImageViews = malloc(app->numberOfImages);
+  app->swapChainImageViews = malloc(sizeof(VkImageView*) * app->numberOfImages);
 
   for (size_t i = 0; i < app->numberOfImages; i++) {
     VkImageViewCreateInfo createInfo = {
@@ -790,10 +848,10 @@ STRS_INTERN void createSwapChain(StrApp *app) {
     .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
   };
 
-  QueueFamilyIndices indices = findQueueFamilyIndices(app->physicalDevice, app->surface);
-  uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value, indices.presentFamily.value};
+  QueueFamilyIndices familyIndices = findQueueFamilyIndices(app->physicalDevice, app->surface);
+  uint32_t queueFamilyIndices[] = {familyIndices.graphicsFamily.value, familyIndices.presentFamily.value};
 
-  if (indices.graphicsFamily.value != indices.presentFamily.value) {
+  if (familyIndices.graphicsFamily.value != familyIndices.presentFamily.value) {
     createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
     createInfo.queueFamilyIndexCount = 2;
     createInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -812,7 +870,7 @@ STRS_INTERN void createSwapChain(StrApp *app) {
   dbg_assert(result == VK_SUCCESS);
 
   vkGetSwapchainImagesKHR(app->logicalDevice, app->swapChain, &imageCount, NULL);
-  app->swapChainImages = malloc(imageCount);
+  app->swapChainImages = malloc(sizeof(VkImage*) * imageCount);
   vkGetSwapchainImagesKHR(app->logicalDevice, app->swapChain, &imageCount, app->swapChainImages);
 
   app->swapChainImageFormat = surfaceFormat.format;
@@ -823,16 +881,16 @@ STRS_INTERN void createSwapChain(StrApp *app) {
 }
 
 STRS_INTERN void createLogicalDevice(StrApp *app) {
-  QueueFamilyIndices indices = findQueueFamilyIndices(app->physicalDevice, app->surface);
+  QueueFamilyIndices queueFamilyIndices = findQueueFamilyIndices(app->physicalDevice, app->surface);
 
   VkDeviceQueueCreateInfo *queueCreateInfos;
 
   float queuePriority = 1.0f;
   int sizeOfCreateInfo;
-  if (indices.graphicsFamily.value == indices.presentFamily.value) {
+  if (queueFamilyIndices.graphicsFamily.value == queueFamilyIndices.presentFamily.value) {
     VkDeviceQueueCreateInfo queueCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-      .queueFamilyIndex = indices.graphicsFamily.value,
+      .queueFamilyIndex = queueFamilyIndices.graphicsFamily.value,
       .queueCount = 1,
       .pQueuePriorities = &queuePriority
     };
@@ -843,13 +901,13 @@ STRS_INTERN void createLogicalDevice(StrApp *app) {
   } else {
     VkDeviceQueueCreateInfo graphicsQueueCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-      .queueFamilyIndex = indices.presentFamily.value,
+      .queueFamilyIndex = queueFamilyIndices.presentFamily.value,
       .queueCount = 1,
       .pQueuePriorities = &queuePriority
     };
     VkDeviceQueueCreateInfo presentQueueCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-      .queueFamilyIndex = indices.presentFamily.value,
+      .queueFamilyIndex = queueFamilyIndices.presentFamily.value,
       .queueCount = 1,
       .pQueuePriorities = &queuePriority
     };
@@ -878,8 +936,8 @@ STRS_INTERN void createLogicalDevice(StrApp *app) {
 
   VkResult result = vkCreateDevice(app->physicalDevice, &createInfo, NULL, &app->logicalDevice);
   dbg_assert(result == VK_SUCCESS);
-  vkGetDeviceQueue(app->logicalDevice, indices.graphicsFamily.value, 0, &app->graphicsQueue);
-  vkGetDeviceQueue(app->logicalDevice, indices.presentFamily.value, 0, &app->presentQueue);
+  vkGetDeviceQueue(app->logicalDevice, queueFamilyIndices.graphicsFamily.value, 0, &app->graphicsQueue);
+  vkGetDeviceQueue(app->logicalDevice, queueFamilyIndices.presentFamily.value, 0, &app->presentQueue);
 
   free(queueCreateInfos);
 }
@@ -978,6 +1036,7 @@ STRS_INTERN void recreateSwapChain(StrApp *app) {
   createRenderPass(app);
   createGraphicsPipeline(app);
   createFrameBuffers(app);
+  createUniformBuffers(app);
   createCommandBuffers(app);
 }
 
@@ -1008,6 +1067,8 @@ STRS_INTERN void drawFrame(StrApp *app) {
   VkSemaphore waitSemaphores[] = {app->imageAvailableSemaphores[app->currentFrame]};
   VkSemaphore signalSemaphores[] = {app->renderFinishedSemaphores[app->currentFrame]};
   VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+  updateUniformBuffers(app, imageIndex);
 
   VkSubmitInfo submitInfo = {
     .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -1047,6 +1108,87 @@ STRS_INTERN void drawFrame(StrApp *app) {
   app->currentFrame = (app->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+void updateUniformBuffers(StrApp *app, uint32_t currentImage) {
+  if(!timeInitialized) {
+    startTime = time(NULL);
+    timeInitialized = true;
+  }
+
+  time_t currentTime = time(NULL);
+  float time = (float)difftime(startTime, currentTime);
+
+  UniformBufferObject ubo = {0};
+  ubo.model[0][0] = 1.0f;
+  ubo.model[1][1] = 1.0f;
+  ubo.model[2][2] = 1.0f;
+  ubo.model[3][3] = 1.0f;
+  glm_rotate(ubo.model, (float)(time * toRadians(90.0f)), (vec3){0.0f, 0.0f, 1.0f});
+  glm_lookat((vec3){2.0f, 2.0f, 2.0f}, (vec3){0.0f, 0.0f, 0.0f}, (vec3){0.0f, 0.0f, 1.0f}, ubo.view);
+  glm_perspective((float)toRadians(45.0f),
+                  (float)app->swapChainExtent.width / (float) app->swapChainExtent.height,
+                  0.1f, 10.0f, ubo.proj);
+  ubo.proj[1][1] *= -1;
+
+  void* data;
+  vkMapMemory(app->logicalDevice, app->uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+  memcpy(data, &ubo, sizeof(ubo));
+  vkUnmapMemory(app->logicalDevice, app->uniformBuffersMemory[currentImage]);
+}
+
+STRS_INTERN void createDescriptorPool(StrApp *app) {
+  VkDescriptorPoolSize poolSize = {
+    .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    .descriptorCount = app->numberOfImages
+  };
+
+  VkDescriptorPoolCreateInfo poolInfo = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+    .poolSizeCount = 1,
+    .pPoolSizes = &poolSize,
+    .maxSets = app->numberOfImages
+  };
+
+  VkResult result = vkCreateDescriptorPool(app->logicalDevice, &poolInfo, NULL, &app->descriptorPool);
+  dbg_assert(result == VK_SUCCESS);
+}
+
+STRS_INTERN void createDescriptorSets(StrApp *app) {
+  VkDescriptorSetLayout* layouts = malloc(sizeof(VkDescriptorSetLayout) * app->numberOfImages);
+  for(int i = 0; i < app->numberOfImages; i++) {
+    layouts[i] = app->descriptorSetLayout;
+  }
+  VkDescriptorSetAllocateInfo allocInfo = {
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+    .descriptorPool = app->descriptorPool,
+    .descriptorSetCount = app->numberOfImages,
+    .pSetLayouts = layouts
+  };
+
+  app->descriptorSets = malloc(sizeof(VkDescriptorSet) * app->numberOfImages);
+  VkResult result = vkAllocateDescriptorSets(app->logicalDevice, &allocInfo, app->descriptorSets);
+  dbg_assert(result == VK_SUCCESS);
+
+  for (size_t i = 0; i < app->numberOfImages; i++) {
+    VkDescriptorBufferInfo bufferInfo = {
+      .buffer = app->uniformBuffers[i],
+      .offset = 0,
+      .range = sizeof(UniformBufferObject)
+    };
+
+    VkWriteDescriptorSet descriptorWrite = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = app->descriptorSets[i],
+      .dstBinding = 0,
+      .dstArrayElement = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      .descriptorCount = 1,
+      .pBufferInfo = &bufferInfo
+    };
+
+    vkUpdateDescriptorSets(app->logicalDevice, 1, &descriptorWrite, 0, NULL);
+  }
+}
+
 static void frameBufferResizeCallback(GLFWwindow *window, int width, int height) {
   StrApp *app = glfwGetWindowUserPointer(window);
   app->frameBufferResized = true;
@@ -1077,11 +1219,15 @@ STRS_LIB StrApp *strAppCreate(int width, int height, const char *title) {
   createImageViews(app);
   createRenderPass(app);
   createShaderModules(app);
+  createDescriptorSetLayout(app);
   createGraphicsPipeline(app);
   createFrameBuffers(app);
   createCommandPool(app);
   createVertexBuffer(app);
   createIndexBuffer(app);
+  createUniformBuffers(app);
+  createDescriptorPool(app);
+  createDescriptorSets(app);
   createCommandBuffers(app);
   createSyncObjects(app);
 
@@ -1108,6 +1254,13 @@ STRS_LIB void strTerminate() {
 STRS_LIB void strAppFree(StrApp *app) {
   cleanupSwapChain(app);
 
+  vkDestroyDescriptorSetLayout(app->logicalDevice, app->descriptorSetLayout, NULL);
+
+  for (size_t i = 0; i < app->numberOfImages; i++) {
+    vkDestroyBuffer(app->logicalDevice, app->uniformBuffers[i], NULL);
+    vkFreeMemory(app->logicalDevice, app->uniformBuffersMemory[i], NULL);
+  }
+
   vkDestroyBuffer(app->logicalDevice, app->indexBuffer, NULL);
   vkFreeMemory(app->logicalDevice, app->indexBufferMemory, NULL);
 
@@ -1131,6 +1284,11 @@ STRS_LIB void strAppFree(StrApp *app) {
   free(app->renderFinishedSemaphores);
   free(app->inFlightFences);
   free(app->imagesInFlight);
+
+  free(app->uniformBuffers);
+  free(app->uniformBuffersMemory);
+
+  free(app->descriptorSets);
 
   free(app);
   app = NULL;
