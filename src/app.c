@@ -1,5 +1,5 @@
 #include "app.h"
-#include <stdint.h>
+#include "widget.h"
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
@@ -8,6 +8,9 @@
 #include <cglm/cglm.h>
 #include <cglm/affine.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #ifndef NDEBUG
 #define dbg_assert(x) assert(x)
 static bool enableValidationLayers = true;
@@ -15,8 +18,6 @@ static bool enableValidationLayers = true;
 #define dbg_assert
 static bool enableValidationLayers = false;
 #endif
-
-#define STRS_INTERN static
 
 typedef struct {
   mat4 model;
@@ -83,6 +84,7 @@ STRS_INTERN void createDescriptorSetLayout(StrApp *app);
 STRS_INTERN void createGraphicsPipeline(StrApp *app);
 STRS_INTERN void createFrameBuffers(StrApp *app);
 STRS_INTERN void createCommandPool(StrApp *app);
+STRS_INTERN void createTextureImage(StrApp *app);
 STRS_INTERN void createVertexBuffer(StrApp *app);
 STRS_INTERN void createIndexBuffer(StrApp *app);
 STRS_INTERN void createUniformBuffers(StrApp *app);
@@ -1190,12 +1192,192 @@ STRS_INTERN void createDescriptorSets(StrApp *app) {
   }
 }
 
+
+
+void endSingleTimeCommands(StrApp *app, VkCommandBuffer commandBuffer) {
+  vkEndCommandBuffer(commandBuffer);
+
+  VkSubmitInfo submitInfo = {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 1,
+    .pCommandBuffers = &commandBuffer
+  };
+
+  vkQueueSubmit(app->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+  vkQueueWaitIdle(app->graphicsQueue);
+
+  vkFreeCommandBuffers(app->logicalDevice, app->commandPool, 1, &commandBuffer);
+}
+
+VkCommandBuffer beginSingleTimeCommands(StrApp *app) {
+  VkCommandBufferAllocateInfo allocInfo = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandPool = app->commandPool,
+    .commandBufferCount = 1
+  };
+
+  VkCommandBuffer commandBuffer;
+  vkAllocateCommandBuffers(app->logicalDevice, &allocInfo, &commandBuffer);
+
+  VkCommandBufferBeginInfo beginInfo = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+  };
+
+  vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+  return commandBuffer;
+}
+
+void copyBufferToImage(StrApp *app, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+  VkCommandBuffer commandBuffer = beginSingleTimeCommands(app);
+
+  VkBufferImageCopy region = {
+    .bufferOffset = 0,
+    .bufferRowLength = 0,
+    .bufferImageHeight = 0,
+    .imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+    .imageSubresource.mipLevel = 0,
+    .imageSubresource.baseArrayLayer = 0,
+    .imageSubresource.layerCount = 1,
+    .imageOffset = (VkOffset3D) {0, 0, 0},
+    .imageExtent = { width, height, 1}
+  };
+
+  vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+  endSingleTimeCommands(app, commandBuffer);
+}
+
+void transitionImageLayout(StrApp *app, VkImage image,
+                           VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
+  VkCommandBuffer commandBuffer = beginSingleTimeCommands(app);
+
+  VkImageMemoryBarrier barrier = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    .oldLayout = oldLayout,
+    .newLayout = newLayout,
+    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    .image = image,
+    .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+    .subresourceRange.baseMipLevel = 0,
+    .subresourceRange.levelCount = 1,
+    .subresourceRange.baseArrayLayer = 0,
+    .subresourceRange.layerCount = 1
+  };
+
+  VkPipelineStageFlags sourceStage;
+  VkPipelineStageFlags destinationStage;
+
+  if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  } else {
+    exit(-1);
+  }
+
+  vkCmdPipelineBarrier(
+    commandBuffer,
+    sourceStage, destinationStage,
+    0,
+    0, NULL,
+    0, NULL,
+    1, &barrier
+    );
+
+  endSingleTimeCommands(app, commandBuffer);
+}
+
+void createImage(StrApp *app, uint32_t width, uint32_t height,
+                 VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+                 VkMemoryPropertyFlags properties, VkImage* image,
+                 VkDeviceMemory* imageMemory) {
+  VkImageCreateInfo imageInfo = {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+    .imageType = VK_IMAGE_TYPE_2D,
+    .extent.width = width,
+    .extent.height = height,
+    .extent.depth = 1,
+    .mipLevels = 1,
+    .arrayLayers = 1,
+    .format = format,
+    .tiling = tiling,
+    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    .usage = usage,
+    .samples = VK_SAMPLE_COUNT_1_BIT,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+  };
+
+  VkResult result = vkCreateImage(app->logicalDevice, &imageInfo, NULL, image);
+
+  VkMemoryRequirements memRequirements;
+  vkGetImageMemoryRequirements(app->logicalDevice, *image, &memRequirements);
+
+  VkMemoryAllocateInfo allocInfo = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = memRequirements.size,
+    .memoryTypeIndex = findMemoryType(app->physicalDevice, memRequirements.memoryTypeBits, properties)
+  };
+
+  result = vkAllocateMemory(app->logicalDevice, &allocInfo, NULL, imageMemory);
+
+  vkBindImageMemory(app->logicalDevice, *image, *imageMemory, 0);
+}
+
+void createTextureImage(StrApp *app) {
+  int texWidth, texHeight, texChannels;
+  stbi_uc* pixels = stbi_load("texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+  dbg_assert(pixels != NULL);
+
+  VkBuffer stagingBuffer;
+  VkDeviceMemory stagingBufferMemory;
+  createBuffer(app, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+               VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+               &stagingBuffer, &stagingBufferMemory);
+
+  void* data;
+  vkMapMemory(app->logicalDevice, stagingBufferMemory, 0, imageSize, 0, &data);
+  memcpy(data, pixels, imageSize);
+  vkUnmapMemory(app->logicalDevice, stagingBufferMemory);
+
+  stbi_image_free(pixels);
+
+  createImage(app, texWidth, texHeight,
+              VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+              VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &app->textureImage, &app->textureImageMemory);
+
+  transitionImageLayout(app, app->textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  copyBufferToImage(app, stagingBuffer, app->textureImage, texWidth, texHeight);
+  transitionImageLayout(app, app->textureImage,
+                        VK_FORMAT_R8G8B8A8_SRGB,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+  vkDestroyBuffer(app->logicalDevice, stagingBuffer, NULL);
+  vkFreeMemory(app->logicalDevice, stagingBufferMemory, NULL);
+}
+
 static void frameBufferResizeCallback(GLFWwindow *window, int width, int height) {
   StrApp *app = glfwGetWindowUserPointer(window);
   app->frameBufferResized = true;
 }
 
-STRS_LIB StrApp *strAppCreate(int width, int height, const char *title) {
+STRS_LIB StrApp *strsAppCreate(int width, int height, const char *title) {
   if (!init) {
     return NULL;
   }
@@ -1235,7 +1417,7 @@ STRS_LIB StrApp *strAppCreate(int width, int height, const char *title) {
   return app;
 }
 
-STRS_LIB void strAppRun(StrApp *app) {
+STRS_LIB void strsAppRun(StrApp *app) {
   while (!glfwWindowShouldClose(app->window)) {
     glfwPollEvents();
     drawFrame(app);
@@ -1243,17 +1425,24 @@ STRS_LIB void strAppRun(StrApp *app) {
   vkDeviceWaitIdle(app->logicalDevice);
 }
 
-STRS_LIB int strInit() {
+STRS_LIB void strsAppAdd(StrApp *app, Widget *widget) {
+  widget->createWidget();
+}
+
+STRS_LIB int strsInit() {
   init = true;
   return glfwInit();
 }
 
-STRS_LIB void strTerminate() {
+STRS_LIB void strsTerminate() {
   glfwTerminate();
 }
 
-STRS_LIB void strAppFree(StrApp *app) {
+STRS_LIB void strsAppFree(StrApp *app) {
   cleanupSwapChain(app);
+
+//  vkDestroyImage(app->logicalDevice, app->textureImage, NULL);
+//  vkFreeMemory(app->logicalDevice, app->textureImageMemory, NULL);
 
   vkDestroyDescriptorSetLayout(app->logicalDevice, app->descriptorSetLayout, NULL);
 

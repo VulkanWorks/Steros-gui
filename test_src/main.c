@@ -2,12 +2,12 @@
 #include <app.h>
 
 int main(void) {
-  strInit();
-  StrApp *app = strAppCreate(800, 600, "Hello");
+  strsInit();
+  StrApp *app = strsAppCreate(800, 600, "Hello");
   printf("Hello\n");
-  strAppRun(app);
+  strsAppRun(app);
   printf("2hello\n");
-  strAppFree(app);
-  strTerminate();
+  strsAppFree(app);
+  strsTerminate();
 }
 

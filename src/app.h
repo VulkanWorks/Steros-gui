@@ -1,12 +1,12 @@
 #ifndef STEROS_APP_H
 #define STEROS_APP_H
 
+#include "steros.h"
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <stdbool.h>
-
-#define STRS_LIB
 
 typedef struct {
     GLFWwindow* window;
@@ -52,14 +52,18 @@ typedef struct {
     VkBuffer* uniformBuffers;
     VkDeviceMemory* uniformBuffersMemory;
 
+    VkImage textureImage;
+    VkDeviceMemory textureImageMemory;
+
     size_t currentFrame;
     bool frameBufferResized;
 } StrApp;
 
-STRS_LIB int strInit();
-STRS_LIB StrApp* strAppCreate(int width, int height, const char* title);
-STRS_LIB void strAppRun(StrApp *app);
-STRS_LIB void strAppFree(StrApp* app);
-STRS_LIB void strTerminate();
+STRS_LIB int strsInit();
+STRS_LIB StrApp* strsAppCreate(int width, int height, const char* title);
+STRS_LIB void strsAppRun(StrApp *app);
+STRS_LIB void strsAppAdd(StrApp *app, Widget *widget);
+STRS_LIB void strsAppFree(StrApp* app);
+STRS_LIB void strsTerminate();
 
 #endif //STEROS_APP_H
