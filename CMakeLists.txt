@@ -5,7 +5,7 @@ set(CMAKE_C_STANDARD 99)
 
 include_directories(src)
 
-add_library(steros src/app.h src/app.c src/widget.h src/button.h src/steros.h src/button.c)
+add_library(steros src/app.h src/app.c src/button.h src/steros.h src/button.c)
 add_executable(steros_test test_src/main.c)
 
 target_link_libraries(steros

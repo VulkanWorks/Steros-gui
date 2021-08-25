@@ -1,5 +1,9 @@
 /cmake-build-release
 /cmake-build-debug
 /cmake-build-debug-coverage
+/build
 /.idea
-/vgcore.34662
+/.vscode
+/shaders/shader.vert.spv
+/shaders/shader.frag.spv
+/latex

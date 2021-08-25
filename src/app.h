@@ -4,66 +4,134 @@
 #include "steros.h"
 
 #define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
 
+#include <GLFW/glfw3.h>
+#include <cglm/cglm.h>
 #include <stdbool.h>
 
+#define STRS_IMPL_STR
+
+#include "ntdstring.h"
+
 typedef struct {
-    GLFWwindow* window;
+  void *data;
+  VkDeviceSize bufferSize;
+  VkBuffer buffer;
+  VkDeviceMemory bufferMemory;
+  VkBuffer stagingBuffer;
+  VkDeviceMemory stagingBufferMemory;
+  bool contentsChanged;
+} VulkanBuffer;
 
-    VkInstance instance;
-    VkSurfaceKHR surface;
-    VkPhysicalDevice physicalDevice;
-    VkDevice logicalDevice;
-    VkQueue presentQueue;
-    VkQueue graphicsQueue;
-    VkSwapchainKHR swapChain;
-    VkImage *swapChainImages;
-    uint32_t numberOfImages;
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
-    VkImageView *swapChainImageViews;
-    VkRenderPass renderPass;
+typedef struct {
+  vec2 pos;
+  vec3 color;
+} Vertex;
 
-    VkShaderModule vertShaderModule;
-    VkShaderModule fragShaderModule;
+typedef struct {
+  VkVertexInputAttributeDescription array[2];
+  uint32_t size;
+} VkVertexInputAttributeDescriptionArray;
 
-    VkDescriptorSetLayout descriptorSetLayout;
+typedef struct {
+  VkPipelineShaderStageCreateInfo shaderStages[2];
+  VkVertexInputBindingDescription bindingDescription;
+  VkVertexInputAttributeDescriptionArray attributeDescriptions;
+  VkPipelineVertexInputStateCreateInfo vertexInputInfo;
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly;
+  VkPipelineViewportStateCreateInfo viewportState;
+  VkPipelineRasterizationStateCreateInfo rasterizer;
+  VkPipelineMultisampleStateCreateInfo multisampling;
+  VkPipelineColorBlendAttachmentState colorBlendAttachment;
+  VkPipelineColorBlendStateCreateInfo colorBlending;
+  VkDynamicState dynamicStateEnables[2];
+  uint8_t dynamicStateCount;
+  VkPipelineDynamicStateCreateInfo dynamicStateInfo;
+} PipelineConfigInfo;
 
-    VkPipelineLayout pipelineLayout;
-    VkPipeline pipeline;
-    VkFramebuffer *swapChainFrameBuffers;
-    VkCommandPool commandPool;
 
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSet* descriptorSets;
+typedef struct {
+  Vertex *vertices;
+  uint64_t vertexCount;
+  uint16_t *indices;
+  uint64_t indexCount;
 
-    VkCommandBuffer *commandBuffers;
+  GLFWwindow *window;
 
-    VkSemaphore* imageAvailableSemaphores;
-    VkSemaphore* renderFinishedSemaphores;
-    VkFence* inFlightFences;
-    VkFence* imagesInFlight;
+  VkInstance instance;
+  VkSurfaceKHR surface;
+  VkPhysicalDevice physicalDevice;
 
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
-    VkBuffer* uniformBuffers;
-    VkDeviceMemory* uniformBuffersMemory;
+  VkDevice logicalDevice;
+  VkQueue presentQueue;
+  VkQueue graphicsQueue;
+  VkSwapchainKHR swapChain;
+  VkImage *swapChainImages;
 
-    VkImage textureImage;
-    VkDeviceMemory textureImageMemory;
+  uint32_t numberOfImages;
+  VkFormat swapChainImageFormat;
+  VkExtent2D swapChainExtent;
+  VkImageView *swapChainImageViews;
+  VkRenderPass renderPass;
 
-    size_t currentFrame;
-    bool frameBufferResized;
-} StrApp;
+  VkShaderModule vertShaderModule;
+  VkShaderModule fragShaderModule;
+
+  VkDescriptorSetLayout descriptorSetLayout;
+
+  PipelineConfigInfo pipelineConfig;
+  VkPipelineLayout pipelineLayout;
+  VkPipeline pipeline;
+  VkFramebuffer *swapChainFrameBuffers;
+  VkCommandPool commandPool;
+
+  VkDescriptorPool descriptorPool;
+  VkDescriptorSet *descriptorSets;
+
+  VkCommandBuffer *commandBuffers;
+
+  VkSemaphore *imageAvailableSemaphores;
+  VkSemaphore *renderFinishedSemaphores;
+  VkFence *inFlightFences;
+  VkFence *imagesInFlight;
+
+  VulkanBuffer vertexBuffer;
+  VulkanBuffer indexBuffer;
+
+  VkBuffer *uniformBuffers;
+  VkDeviceMemory *uniformBuffersMemory;
+
+  VkImage textureImage;
+  VkDeviceMemory textureImageMemory;
+
+  size_t currentFrame;
+  bool frameBufferResized;
+  pthread_t thread;
+} StrsApp;
+
+typedef void (*PFN_strsCreateWidget)(StrsApp *app, void *pointer);
+typedef void (*PFN_strsUpdateWidget)(StrsApp *app, void *pointer);
+typedef void (*PFN_strsWhileSelected)(StrsApp *app, void *pointer);
+typedef void (*PFN_strsOnAction)(StrsApp *app, void *pointer);
+
+typedef struct {
+  void *pointer;
+  PFN_strsCreateWidget createWidget;
+  PFN_strsUpdateWidget updateWidget;
+  PFN_strsWhileSelected whileSelected;
+  PFN_strsOnAction onAction;
+} Widget;
 
 STRS_LIB int strsInit();
-STRS_LIB StrApp* strsAppCreate(int width, int height, const char* title);
-STRS_LIB void strsAppRun(StrApp *app);
-STRS_LIB void strsAppAdd(StrApp *app, Widget *widget);
-STRS_LIB void strsAppFree(StrApp* app);
+STRS_LIB StrsApp *strsAppCreate(int width, int height, StrsStr *title);
+#ifndef STRS_NOT_MULTI_THREADED
+STRS_LIB void strsAppRun(StrsApp *app);
+#else
+typedef void (*PFN_strsExecAsync)();
+STRS_LIB void strsAppRun(StrsApp *app, PFN_strsExecAsync strsExecAsync);
+#endif
+STRS_LIB void strsAppAdd(StrsApp *app, Widget *widget);
+STRS_LIB void strsAppFree(StrsApp *app);
 STRS_LIB void strsTerminate();
 
 #endif //STEROS_APP_H
