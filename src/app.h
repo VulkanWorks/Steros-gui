@@ -1,19 +1,30 @@
 #ifndef STEROS_APP_H
 #define STEROS_APP_H
 
+// LIB
 #include "steros.h"
+#include "windowing/window.h"
 
-#define GLFW_INCLUDE_VULKAN
+// Vulkan
+#include <vulkan/vulkan.h>
 
-#include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
+
+// STD
 #include <stdbool.h>
 
+// NTD
 #define STRS_IMPL_STR
+#include "ntd/string.h"
 
-#include "ntdstring.h"
+typedef struct strs_widget strs_widget;
+typedef struct strs_app_tag strs_app;
+typedef struct pipeline_config_info_tag pipeline_config_info;
+typedef struct vulkan_buffer_tag vulkan_buffer;
+typedef struct vk_vertex_input_attribute_description_array_tag vk_vertex_input_attribute_description_array;
+typedef struct strs_vertex_tag strs_vertex;
 
-typedef struct {
+struct vulkan_buffer_tag {
   void *data;
   VkDeviceSize bufferSize;
   VkBuffer buffer;
@@ -21,117 +32,69 @@ typedef struct {
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
   bool contentsChanged;
-} VulkanBuffer;
+};
 
-typedef struct {
+struct strs_vertex_tag {
   vec2 pos;
   vec3 color;
-} Vertex;
+};
 
-typedef struct {
+struct vk_vertex_input_attribute_description_array_tag {
   VkVertexInputAttributeDescription array[2];
   uint32_t size;
-} VkVertexInputAttributeDescriptionArray;
+};
 
-typedef struct {
-  VkPipelineShaderStageCreateInfo shaderStages[2];
-  VkVertexInputBindingDescription bindingDescription;
-  VkVertexInputAttributeDescriptionArray attributeDescriptions;
-  VkPipelineVertexInputStateCreateInfo vertexInputInfo;
-  VkPipelineInputAssemblyStateCreateInfo inputAssembly;
-  VkPipelineViewportStateCreateInfo viewportState;
+struct pipeline_config_info_tag {
+  VkPipelineShaderStageCreateInfo shader_stages[2];
+  VkVertexInputBindingDescription binding_description;
+  vk_vertex_input_attribute_description_array attribute_descriptions;
+  VkPipelineVertexInputStateCreateInfo vertex_input_info;
+  VkPipelineInputAssemblyStateCreateInfo input_assembly;
+  VkPipelineViewportStateCreateInfo viewport_state;
   VkPipelineRasterizationStateCreateInfo rasterizer;
   VkPipelineMultisampleStateCreateInfo multisampling;
-  VkPipelineColorBlendAttachmentState colorBlendAttachment;
-  VkPipelineColorBlendStateCreateInfo colorBlending;
-  VkDynamicState dynamicStateEnables[2];
-  uint8_t dynamicStateCount;
-  VkPipelineDynamicStateCreateInfo dynamicStateInfo;
-} PipelineConfigInfo;
+  VkPipelineColorBlendAttachmentState color_blend_attachment;
+  VkPipelineColorBlendStateCreateInfo color_blending;
+  VkDynamicState dynamic_state_enables[2];
+  uint8_t dynamic_state_count;
+  VkPipelineDynamicStateCreateInfo dynamic_state_info;
+};
 
 
-typedef struct {
-  Vertex *vertices;
-  uint64_t vertexCount;
-  uint16_t *indices;
-  uint64_t indexCount;
 
-  GLFWwindow *window;
+typedef void (*PFN_strs_create_widget)(strs_app *app, void *pointer);
+typedef void (*PFN_strs_update_widget)(strs_app *app, void *pointer);
+typedef void (*PFN_strs_while_selected)(strs_app *app, void *pointer);
+typedef void (*PFN_strs_on_action)(strs_app *app, void *pointer);
 
-  VkInstance instance;
-  VkSurfaceKHR surface;
-  VkPhysicalDevice physicalDevice;
-
-  VkDevice logicalDevice;
-  VkQueue presentQueue;
-  VkQueue graphicsQueue;
-  VkSwapchainKHR swapChain;
-  VkImage *swapChainImages;
-
-  uint32_t numberOfImages;
-  VkFormat swapChainImageFormat;
-  VkExtent2D swapChainExtent;
-  VkImageView *swapChainImageViews;
-  VkRenderPass renderPass;
-
-  VkShaderModule vertShaderModule;
-  VkShaderModule fragShaderModule;
-
-  VkDescriptorSetLayout descriptorSetLayout;
-
-  PipelineConfigInfo pipelineConfig;
-  VkPipelineLayout pipelineLayout;
-  VkPipeline pipeline;
-  VkFramebuffer *swapChainFrameBuffers;
-  VkCommandPool commandPool;
-
-  VkDescriptorPool descriptorPool;
-  VkDescriptorSet *descriptorSets;
-
-  VkCommandBuffer *commandBuffers;
-
-  VkSemaphore *imageAvailableSemaphores;
-  VkSemaphore *renderFinishedSemaphores;
-  VkFence *inFlightFences;
-  VkFence *imagesInFlight;
-
-  VulkanBuffer vertexBuffer;
-  VulkanBuffer indexBuffer;
-
-  VkBuffer *uniformBuffers;
-  VkDeviceMemory *uniformBuffersMemory;
-
-  VkImage textureImage;
-  VkDeviceMemory textureImageMemory;
-
-  size_t currentFrame;
-  bool frameBufferResized;
-  pthread_t thread;
-} StrsApp;
-
-typedef void (*PFN_strsCreateWidget)(StrsApp *app, void *pointer);
-typedef void (*PFN_strsUpdateWidget)(StrsApp *app, void *pointer);
-typedef void (*PFN_strsWhileSelected)(StrsApp *app, void *pointer);
-typedef void (*PFN_strsOnAction)(StrsApp *app, void *pointer);
-
-typedef struct {
+struct strs_widget{
   void *pointer;
-  PFN_strsCreateWidget createWidget;
-  PFN_strsUpdateWidget updateWidget;
-  PFN_strsWhileSelected whileSelected;
-  PFN_strsOnAction onAction;
-} Widget;
+  PFN_strs_create_widget create_widget;
+  PFN_strs_update_widget update_widget;
+  PFN_strs_while_selected while_selected;
+  PFN_strs_on_action on_action;
+};
 
-STRS_LIB int strsInit();
-STRS_LIB StrsApp *strsAppCreate(int width, int height, StrsStr *title);
+STRS_LIB int strs_init();
+STRS_LIB strs_app *strs_app_create(int width, int height, strs_string *title);
 #ifndef STRS_NOT_MULTI_THREADED
-STRS_LIB void strsAppRun(StrsApp *app);
+STRS_LIB void strs_app_run(strs_app *app);
 #else
 typedef void (*PFN_strsExecAsync)();
-STRS_LIB void strsAppRun(StrsApp *app, PFN_strsExecAsync strsExecAsync);
+STRS_LIB void strsAppRun(strs_app *app, PFN_strsExecAsync strsExecAsync);
 #endif
-STRS_LIB void strsAppAdd(StrsApp *app, Widget *widget);
-STRS_LIB void strsAppFree(StrsApp *app);
-STRS_LIB void strsTerminate();
+STRS_LIB void strs_app_add(strs_app *app, strs_widget *widget);
+STRS_LIB void strs_app_free(strs_app *app);
+STRS_LIB void strs_terminate();
+
+STRS_LIB void strs_push_vertices(strs_app *app, const strs_vertex *vertices, uint64_t count);
+STRS_LIB void strs_pop_back_vertices(strs_app *app, uint64_t count);
+STRS_LIB void strs_pop_front_vertices(strs_app *app, uint64_t count);
+STRS_LIB void strs_erase_vertices(strs_app *app, uint64_t index);
+
+STRS_LIB void strs_push_indices(strs_app *app, const uint16_t *indices, uint64_t count);
+STRS_LIB void strs_pop_back_indices(strs_app *app, uint64_t count);
+STRS_LIB void strs_pop_front_indices(strs_app *app, uint64_t count);
+STRS_LIB void strs_erase_indices(strs_app *app, uint64_t index);
 
 #endif //STEROS_APP_H
