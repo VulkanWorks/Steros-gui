@@ -12,6 +12,7 @@
 
 #define IMPL_OPTION_DEF
 #include "helper/option.h"
+#include "helper/arrays.h"
 
 // Vendor
 #define STB_IMAGE_IMPLEMENTATION
@@ -25,6 +26,32 @@ static bool enable_validation_layers = true;
 #define dbg_assert
 static bool enable_validation_layers = false;
 #endif
+
+typedef struct {
+  void *data;
+  VkDeviceSize bufferSize;
+  VkBuffer buffer;
+  VkDeviceMemory bufferMemory;
+  VkBuffer stagingBuffer;
+  VkDeviceMemory stagingBufferMemory;
+  bool contentsChanged;
+} vulkan_buffer;
+
+typedef struct {
+  VkPipelineShaderStageCreateInfo shader_stages[2];
+  VkVertexInputBindingDescription binding_description;
+  vk_vertex_input_attribute_description_array attribute_descriptions;
+  VkPipelineVertexInputStateCreateInfo vertex_input_info;
+  VkPipelineInputAssemblyStateCreateInfo input_assembly;
+  VkPipelineViewportStateCreateInfo viewport_state;
+  VkPipelineRasterizationStateCreateInfo rasterizer;
+  VkPipelineMultisampleStateCreateInfo multisampling;
+  VkPipelineColorBlendAttachmentState color_blend_attachment;
+  VkPipelineColorBlendStateCreateInfo color_blending;
+  VkDynamicState dynamic_state_enables[2];
+  uint8_t dynamic_state_count;
+  VkPipelineDynamicStateCreateInfo dynamic_state_info;
+} pipeline_config_info;
 
 typedef struct  {
   strs_vertex *vertices;
@@ -251,8 +278,8 @@ STRS_INTERN char *read_shader(const char *filename, long *size) {
 
 STRS_INTERN void swap_chain_support_details_free(SwapChainSupportDetails *ptr) {
   free(ptr->presentModes);
+  assert(ptr->formats != NULL);
   free(ptr->formats);
-  ptr = NULL;
 }
 
 STRS_INTERN bool queue_family_indices_is_complete(QueueFamilyIndices *indices) {
@@ -1276,7 +1303,7 @@ VkCommandBuffer beginSingleTimeCommands(internal_strs_app *app) {
   return commandBuffer;
 }
 
-void copyBufferToImage(strs_app *app, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+void copyBufferToImage(internal_strs_app *app, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
   VkCommandBuffer commandBuffer = beginSingleTimeCommands(app);
 
   VkBufferImageCopy region = {
@@ -1292,12 +1319,13 @@ void copyBufferToImage(strs_app *app, VkBuffer buffer, VkImage image, uint32_t w
 
   vkCmdCopyBufferToImage(commandBuffer,
                          buffer, image,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+												 1, &region);
 
   endSingleTimeCommands(app, commandBuffer);
 }
 
-void transitionImageLayout(strs_app *app, VkImage image,
+void transitionImageLayout(internal_strs_app *app, VkImage image,
                            VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
   VkCommandBuffer commandBuffer = beginSingleTimeCommands(app);
 
@@ -1347,7 +1375,7 @@ void transitionImageLayout(strs_app *app, VkImage image,
 
 void createImage(internal_strs_app *app, uint32_t width, uint32_t height,
                  VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-                 VkMemoryPropertyFlags properties, VkImage *image,
+  							 VkMemoryPropertyFlags properties, VkImage *image,
                  VkDeviceMemory *imageMemory) {
   VkImageCreateInfo imageInfo = {
     .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1445,17 +1473,18 @@ void destroy_buffer(internal_strs_app *app, vulkan_buffer* buffer) {
   vkFreeMemory(app->logical_device, buffer->bufferMemory, NULL);
 }
 
-void strs_push_indices(strs_app *app, const uint16_t *indices, uint64_t count) {
+void strs_push_indices(strs_app app, const uint16_t *indices, uint64_t count) {
+  internal_strs_app *intern_app = (internal_strs_app*)intern_app;
   uint32_t a = 0;
-  for (uint32_t i = app->index_count; i < app->index_count + count; i++) {
-    app->indices[i] = indices[a];
+  for (uint32_t i = intern_app->index_count; i < intern_app->index_count + count; i++) {
+    intern_app->indices[i] = indices[a];
     a++;
   }
-  app->index_count += count;
-  app->index_buffer.contentsChanged = true;
+  intern_app->index_count += count;
+  intern_app->index_buffer.contentsChanged = true;
 }
 
-void strs_push_vertices(strs_app *app, const strs_vertex *vertices, uint64_t count) {
+void strs_push_vertices(strs_app app, const strs_vertex *vertices, uint64_t count) {
   internal_strs_app *intern_app = (internal_strs_app*)intern_app;
   uint32_t a = 0;
   for (uint32_t i = intern_app->vertex_count; i < intern_app->vertex_count + count; i++) {
@@ -1482,17 +1511,17 @@ void update_vertex_buffer(internal_strs_app *app) {
   create_command_buffers(app);
 }
 
-static void frameBufferResizeCallback(strs_window window, int width, int height) {
+static void resize_callback(strs_window window, uint32_t width, uint32_t height) {
   internal_strs_app *app = strs_window_get_user_pointer(window);
   app->frame_buffer_resized = true;
 }
 
-STRS_LIB strs_app *strs_app_create(int width, int height, strs_string *title) {
+STRS_LIB strs_app strs_app_create(int width, int height, strs_string *title) {
   internal_strs_app *app = malloc(sizeof(internal_strs_app*));
 
   app->window = strs_window_create(width, height, title);
   strs_window_set_user_pointer(app->window, app);
-  strs_window_
+  strs_window_set_resize_callback(app->window, resize_callback);
 
   create_instance(app);
   create_surface(app);
@@ -1515,7 +1544,7 @@ STRS_LIB strs_app *strs_app_create(int width, int height, strs_string *title) {
   create_command_buffers(app);
   create_sync_objects(app);
 
-  return (strs_app*)app;
+  return (strs_app)app;
 }
 
 void *main_loop(void *arg) {
@@ -1529,16 +1558,16 @@ void *main_loop(void *arg) {
   return NULL;
 }
 
-STRS_LIB void strs_app_run(strs_app *app) {
+STRS_LIB void strs_app_run(strs_app app) {
   internal_strs_app *intern_app = (internal_strs_app*)app;
   pthread_create(&intern_app->thread, NULL, main_loop, intern_app);
 }
 
-STRS_LIB void strs_app_add(strs_app *app, strs_widget *widget) {
+STRS_LIB void strs_app_add(strs_app app, strs_widget *widget) {
   widget->create_widget(app, widget->pointer);
 }
 
-STRS_LIB void strs_app_free(strs_app *application) {
+STRS_LIB void strs_app_free(strs_app application) {
   internal_strs_app *app = (internal_strs_app*)application;
   pthread_join(app->thread, NULL);
 
